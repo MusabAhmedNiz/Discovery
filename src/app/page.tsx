@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { usePois } from '@/hooks/usePois';
 import { PoiGrid } from '@/components/PoiGrid';
+import { ManualCoordsForm } from '@/components/ManualCoordsForm';
+import type { Coords } from '@/types/geo';
 
 const RADIUS_OPTIONS = [
   { label: '750 m', value: 750 },
@@ -16,7 +18,9 @@ const RADIUS_OPTIONS = [
 const ALL_KEY = 'All';
 
 export default function Home() {
-  const { coords, status, request } = useGeolocation();
+  const { coords: geoCoords, status, request } = useGeolocation();
+  const [manualCoords, setManualCoords] = useState<Coords | null>(null);
+  const [showManualForm, setShowManualForm] = useState(false);
   const [categoryKey, setCategoryKey] = useState(ALL_KEY);
   const [radiusMeters, setRadiusMeters] = useState(1500);
 
@@ -24,19 +28,24 @@ export default function Home() {
     request();
   }, [request]);
 
+  // Effective coords: manual entry overrides geolocation
+  const effectiveCoords: Coords | null = manualCoords ??
+    (geoCoords
+      ? { latitude: geoCoords.latitude, longitude: geoCoords.longitude }
+      : null);
+
   const { data: allPois = [], isLoading, error: poisError } = usePois({
-    coords,
+    coords: effectiveCoords,
     radiusMeters,
   });
 
-  // Derive unique category labels from actual POI data — sorted alphabetically,
-  // "All" always first
+  // Derive category pills from actual POI data
   const categories = useMemo(() => {
     const labels = new Set(allPois.map((p) => p.categoryLabel));
     return [ALL_KEY, ...[...labels].sort()];
   }, [allPois]);
 
-  // Reset to "All" when category no longer exists in the new data
+  // Reset to "All" if selected category disappears after radius/location change
   useEffect(() => {
     if (categoryKey !== ALL_KEY && !categories.includes(categoryKey)) {
       setCategoryKey(ALL_KEY);
@@ -52,28 +61,80 @@ export default function Home() {
     [allPois, categoryKey],
   );
 
+  function handleManualCoords(coords: Coords) {
+    setManualCoords(coords);
+    setShowManualForm(false);
+    setCategoryKey(ALL_KEY);
+  }
+
+  function resetManualCoords() {
+    setManualCoords(null);
+    setShowManualForm(false);
+    setCategoryKey(ALL_KEY);
+  }
+
+  const isGrantedOrManual = status === 'granted' || manualCoords !== null;
+
   return (
     <main className='min-h-screen bg-gray-50'>
       <div className='mx-auto max-w-7xl px-6 py-10'>
 
         {/* Header */}
-        <div className='mb-8'>
-          <h1 className='text-2xl font-bold text-gray-900'>Discovery</h1>
-          <p className='mt-1 text-sm text-gray-500'>
-            Places near you, sorted by distance.
-          </p>
+        <div className='mb-8 flex items-start justify-between gap-4'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>Discovery</h1>
+            <p className='mt-1 text-sm text-gray-500'>
+              Places near you, sorted by distance.
+            </p>
+          </div>
+
+          {/* Change location — visible once coords are active */}
+          {isGrantedOrManual && (
+            <div className='flex flex-col items-end gap-1'>
+              {manualCoords && (
+                <span className='text-xs text-gray-400'>
+                  Custom location ({manualCoords.latitude.toFixed(4)},{' '}
+                  {manualCoords.longitude.toFixed(4)})
+                </span>
+              )}
+              <div className='flex gap-3'>
+                <button
+                  onClick={() => setShowManualForm((v) => !v)}
+                  className='text-xs text-blue-600 hover:underline'>
+                  {showManualForm ? 'Cancel' : 'Change location'}
+                </button>
+                {manualCoords && (
+                  <button
+                    onClick={resetManualCoords}
+                    className='text-xs text-gray-400 hover:text-gray-600 hover:underline'>
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* Inline change-location form */}
+        {isGrantedOrManual && showManualForm && (
+          <div className='mb-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm'>
+            <p className='mb-3 text-sm font-medium text-gray-700'>
+              Enter coordinates
+            </p>
+            <ManualCoordsForm onSubmit={handleManualCoords} />
+          </div>
+        )}
+
         {/* Requesting location */}
-        {status === 'requesting' && (
+        {status === 'requesting' && !manualCoords && (
           <div className='flex items-center gap-3 text-gray-500'>
             <span className='h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600' />
             <span className='text-sm'>Requesting location access…</span>
           </div>
         )}
 
-        {/* Denied */}
-        {status === 'denied' && (
+        {/* Denied — show retry + manual entry option */}
+        {status === 'denied' && !manualCoords && (
           <div className='rounded-xl border border-gray-100 bg-white p-8 shadow-sm'>
             <p className='text-sm font-semibold text-gray-900'>
               Geolocation access denied.
@@ -86,11 +147,22 @@ export default function Home() {
               className='mt-4 rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700'>
               Try Again
             </button>
+
+            <div className='my-6 flex items-center gap-3'>
+              <div className='h-px flex-1 bg-gray-100' />
+              <span className='text-xs text-gray-400'>or</span>
+              <div className='h-px flex-1 bg-gray-100' />
+            </div>
+
+            <p className='mb-3 text-sm font-medium text-gray-700'>
+              Enter coordinates manually
+            </p>
+            <ManualCoordsForm onSubmit={handleManualCoords} />
           </div>
         )}
 
         {/* Generic geolocation error */}
-        {status === 'error' && (
+        {status === 'error' && !manualCoords && (
           <div className='rounded-xl border border-gray-100 bg-white p-8 shadow-sm'>
             <p className='text-sm font-semibold text-gray-900'>
               Could not determine your location.
@@ -100,15 +172,26 @@ export default function Home() {
               className='mt-4 rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700'>
               Retry
             </button>
+
+            <div className='my-6 flex items-center gap-3'>
+              <div className='h-px flex-1 bg-gray-100' />
+              <span className='text-xs text-gray-400'>or</span>
+              <div className='h-px flex-1 bg-gray-100' />
+            </div>
+
+            <p className='mb-3 text-sm font-medium text-gray-700'>
+              Enter coordinates manually
+            </p>
+            <ManualCoordsForm onSubmit={handleManualCoords} />
           </div>
         )}
 
         {/* Main content */}
-        {status === 'granted' && coords && (
+        {isGrantedOrManual && (
           <>
             {/* Controls */}
             <div className='mb-6 flex flex-wrap items-center justify-between gap-4'>
-              {/* Category pills — derived from data, instant client-side filter */}
+              {/* Category pills */}
               <div className='flex flex-wrap gap-2'>
                 {(isLoading ? [ALL_KEY] : categories).map((label) => (
                   <button

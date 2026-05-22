@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { Poi, OverpassResponse } from '@/types/poi';
+import type { Coords } from '@/types/geo';
 import { ALL_POI_FILTERS, labelFromTags } from '@/lib/categories';
 import { buildOverpassQuery, fetchPois } from '@/lib/overpass';
 import { haversine } from '@/lib/haversine';
@@ -17,11 +18,11 @@ function deriveAddress(tags: Record<string, string>): string | null {
 }
 
 async function fetchAllPois(
-  lat: number,
-  lon: number,
+  coords: Coords,
   radiusMeters: number,
   signal: AbortSignal,
 ): Promise<Poi[]> {
+  const { latitude: lat, longitude: lon } = coords;
   // Always fetch everything — category filtering happens client-side
   const query = buildOverpassQuery(lat, lon, radiusMeters, ALL_POI_FILTERS);
 
@@ -53,7 +54,7 @@ async function fetchAllPois(
 }
 
 export interface UsePoisOptions {
-  coords: GeolocationCoordinates | null;
+  coords: Coords | null;
   radiusMeters: number;
 }
 
@@ -67,13 +68,7 @@ export function usePois({ coords, radiusMeters }: UsePoisOptions) {
       coords?.longitude.toFixed(4),
       radiusMeters,
     ],
-    queryFn: ({ signal }) =>
-      fetchAllPois(
-        coords!.latitude,
-        coords!.longitude,
-        radiusMeters,
-        signal,
-      ),
+    queryFn: ({ signal }) => fetchAllPois(coords!, radiusMeters, signal),
     enabled: !!coords,
   });
 }
