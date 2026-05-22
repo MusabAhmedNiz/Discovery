@@ -3,93 +3,47 @@ export interface OsmFilter {
   tagValue: string;
 }
 
-export interface Category {
-  key: string;
-  label: string;
-  filters: OsmFilter[];
-}
-
-export const CATEGORIES: Category[] = [
-  {
-    key: 'all',
-    label: 'All',
-    filters: [
-      { tagKey: 'amenity', tagValue: 'restaurant' },
-      { tagKey: 'amenity', tagValue: 'cafe' },
-      { tagKey: 'amenity', tagValue: 'fast_food' },
-      { tagKey: 'amenity', tagValue: 'pharmacy' },
-      { tagKey: 'amenity', tagValue: 'hospital' },
-      { tagKey: 'amenity', tagValue: 'fuel' },
-      { tagKey: 'leisure', tagValue: 'park' },
-      { tagKey: 'tourism', tagValue: 'hotel' },
-      { tagKey: 'shop', tagValue: 'supermarket' },
-      { tagKey: 'shop', tagValue: 'mall' },
-    ],
-  },
-  {
-    key: 'food',
-    label: 'Food & Drink',
-    filters: [
-      { tagKey: 'amenity', tagValue: 'restaurant' },
-      { tagKey: 'amenity', tagValue: 'cafe' },
-      { tagKey: 'amenity', tagValue: 'fast_food' },
-    ],
-  },
-  {
-    key: 'coffee',
-    label: 'Coffee',
-    filters: [{ tagKey: 'amenity', tagValue: 'cafe' }],
-  },
-  {
-    key: 'park',
-    label: 'Parks',
-    filters: [{ tagKey: 'leisure', tagValue: 'park' }],
-  },
-  {
-    key: 'shop',
-    label: 'Shopping',
-    filters: [
-      { tagKey: 'shop', tagValue: 'supermarket' },
-      { tagKey: 'shop', tagValue: 'mall' },
-    ],
-  },
-  {
-    key: 'health',
-    label: 'Health',
-    filters: [
-      { tagKey: 'amenity', tagValue: 'pharmacy' },
-      { tagKey: 'amenity', tagValue: 'hospital' },
-    ],
-  },
-  {
-    key: 'hotel',
-    label: 'Hotels',
-    filters: [{ tagKey: 'tourism', tagValue: 'hotel' }],
-  },
-  {
-    key: 'fuel',
-    label: 'Gas Stations',
-    filters: [{ tagKey: 'amenity', tagValue: 'fuel' }],
-  },
+/**
+ * The OSM filters used when querying the Overpass API.
+ * This fetches all relevant POI types in one request.
+ * Category pills are derived from the returned data, not from this list.
+ */
+export const ALL_POI_FILTERS: OsmFilter[] = [
+  { tagKey: 'amenity', tagValue: 'restaurant' },
+  { tagKey: 'amenity', tagValue: 'cafe' },
+  { tagKey: 'amenity', tagValue: 'fast_food' },
+  { tagKey: 'amenity', tagValue: 'bar' },
+  { tagKey: 'amenity', tagValue: 'pub' },
+  { tagKey: 'amenity', tagValue: 'pharmacy' },
+  { tagKey: 'amenity', tagValue: 'hospital' },
+  { tagKey: 'amenity', tagValue: 'fuel' },
+  { tagKey: 'amenity', tagValue: 'bank' },
+  { tagKey: 'amenity', tagValue: 'atm' },
+  { tagKey: 'leisure', tagValue: 'park' },
+  { tagKey: 'tourism', tagValue: 'hotel' },
+  { tagKey: 'shop', tagValue: 'supermarket' },
+  { tagKey: 'shop', tagValue: 'mall' },
+  { tagKey: 'shop', tagValue: 'convenience' },
 ];
 
-export function getCategoryFilters(key: string): OsmFilter[] {
-  return CATEGORIES.find((c) => c.key === key)?.filters ?? CATEGORIES[0].filters;
-}
-
-/** Derive a human-readable category label from OSM tags */
+/** Derive a human-readable category label from a POI's OSM tags. */
 export function labelFromTags(tags: Record<string, string>): string {
   const map: Record<string, string> = {
     restaurant: 'Restaurant',
     cafe: 'Cafe',
     fast_food: 'Fast Food',
+    bar: 'Bar',
+    pub: 'Pub',
     pharmacy: 'Pharmacy',
     hospital: 'Hospital',
     fuel: 'Gas Station',
+    bank: 'Bank',
+    atm: 'ATM',
     park: 'Park',
     hotel: 'Hotel',
     supermarket: 'Supermarket',
     mall: 'Shopping Mall',
+    convenience: 'Convenience Store',
   };
 
   const amenity = tags['amenity'];

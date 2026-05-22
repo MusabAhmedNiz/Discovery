@@ -1,31 +1,53 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { usePois } from '@/hooks/usePois';
 import { PoiGrid } from '@/components/PoiGrid';
-import { CATEGORIES } from '@/lib/categories';
 
 const RADIUS_OPTIONS = [
   { label: '750 m', value: 750 },
   { label: '1.5 km', value: 1500 },
 ];
 
+const ALL_KEY = 'All';
+
 export default function Home() {
   const { coords, status, request } = useGeolocation();
-  const [categoryKey, setCategoryKey] = useState('all');
+  const [categoryKey, setCategoryKey] = useState(ALL_KEY);
   const [radiusMeters, setRadiusMeters] = useState(1500);
 
-  // Trigger geolocation on mount
   useEffect(() => {
     request();
   }, [request]);
 
-  const { pois, isLoading, error: poisError } = usePois({
+  const { data: allPois = [], isLoading, error: poisError } = usePois({
     coords,
-    categoryKey,
     radiusMeters,
   });
+
+  // Derive unique category labels from actual POI data — sorted alphabetically,
+  // "All" always first
+  const categories = useMemo(() => {
+    const labels = new Set(allPois.map((p) => p.categoryLabel));
+    return [ALL_KEY, ...[...labels].sort()];
+  }, [allPois]);
+
+  // Reset to "All" when category no longer exists in the new data
+  useEffect(() => {
+    if (categoryKey !== ALL_KEY && !categories.includes(categoryKey)) {
+      setCategoryKey(ALL_KEY);
+    }
+  }, [categories, categoryKey]);
+
+  // Client-side filter — no network request
+  const filteredPois = useMemo(
+    () =>
+      categoryKey === ALL_KEY
+        ? allPois
+        : allPois.filter((poi) => poi.categoryLabel === categoryKey),
+    [allPois, categoryKey],
+  );
 
   return (
     <main className='min-h-screen bg-gray-50'>
@@ -64,7 +86,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Generic error */}
+        {/* Generic geolocation error */}
         {status === 'error' && (
           <div className='rounded-xl border border-gray-100 bg-white p-8 shadow-sm'>
             <p className='text-sm font-semibold text-gray-900'>
@@ -78,23 +100,23 @@ export default function Home() {
           </div>
         )}
 
-        {/* Main content — location granted */}
+        {/* Main content */}
         {status === 'granted' && coords && (
           <>
             {/* Controls */}
             <div className='mb-6 flex flex-wrap items-center justify-between gap-4'>
-              {/* Category pills */}
+              {/* Category pills — derived from data, instant client-side filter */}
               <div className='flex flex-wrap gap-2'>
-                {CATEGORIES.map((cat) => (
+                {(isLoading ? [ALL_KEY] : categories).map((label) => (
                   <button
-                    key={cat.key}
-                    onClick={() => setCategoryKey(cat.key)}
+                    key={label}
+                    onClick={() => setCategoryKey(label)}
                     className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                      categoryKey === cat.key
+                      categoryKey === label
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}>
-                    {cat.label}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -102,7 +124,7 @@ export default function Home() {
               {/* Radius toggle */}
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-gray-400'>Radius</span>
-                <div className='flex rounded-full border border-gray-200 bg-white overflow-hidden'>
+                <div className='flex overflow-hidden rounded-full border border-gray-200 bg-white'>
                   {RADIUS_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
@@ -119,14 +141,14 @@ export default function Home() {
               </div>
             </div>
 
-            {/* POI fetch error */}
+            {/* Overpass fetch error */}
             {poisError && (
               <p className='mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600'>
-                {poisError}
+                {(poisError as Error).message}
               </p>
             )}
 
-            {/* Loading POIs */}
+            {/* Skeleton while loading */}
             {isLoading && (
               <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'>
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -139,12 +161,13 @@ export default function Home() {
             )}
 
             {/* Results */}
-            {!isLoading && <PoiGrid pois={pois} />}
+            {!isLoading && <PoiGrid pois={filteredPois} />}
 
-            {/* Result count */}
-            {!isLoading && pois.length > 0 && (
+            {/* Count */}
+            {!isLoading && filteredPois.length > 0 && (
               <p className='mt-6 text-center text-xs text-gray-400'>
-                {pois.length} place{pois.length !== 1 ? 's' : ''} found within{' '}
+                {filteredPois.length} place
+                {filteredPois.length !== 1 ? 's' : ''} within{' '}
                 {radiusMeters >= 1000
                   ? `${radiusMeters / 1000} km`
                   : `${radiusMeters} m`}

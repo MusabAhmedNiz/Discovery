@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Poi, OverpassResponse } from '@/types/poi';
-import { getCategoryFilters, labelFromTags } from '@/lib/categories';
+import { ALL_POI_FILTERS, labelFromTags } from '@/lib/categories';
 import { buildOverpassQuery, fetchPois } from '@/lib/overpass';
 import { haversine } from '@/lib/haversine';
 
@@ -16,88 +16,64 @@ function deriveAddress(tags: Record<string, string>): string | null {
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
+async function fetchAllPois(
+  lat: number,
+  lon: number,
+  radiusMeters: number,
+  signal: AbortSignal,
+): Promise<Poi[]> {
+  // Always fetch everything — category filtering happens client-side
+  const query = buildOverpassQuery(lat, lon, radiusMeters, ALL_POI_FILTERS);
+
+  const res = await fetchPois(query, signal);
+  if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
+
+  const data: OverpassResponse = await res.json();
+
+  return data.elements
+    .map((el) => {
+      const lat2 = el.type === 'node' ? el.lat : el.center?.lat;
+      const lon2 = el.type === 'node' ? el.lon : el.center?.lon;
+      if (!lat2 || !lon2 || !el.tags?.name) return null;
+
+      return {
+        id: el.id,
+        type: el.type,
+        lat: lat2,
+        lon: lon2,
+        name: el.tags.name,
+        categoryLabel: labelFromTags(el.tags),
+        address: deriveAddress(el.tags),
+        distanceKm: haversine(lat, lon, lat2, lon2),
+        tags: el.tags,
+      } satisfies Poi;
+    })
+    .filter((p): p is Poi => p !== null)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+}
+
 export interface UsePoisOptions {
   coords: GeolocationCoordinates | null;
-  categoryKey: string;
   radiusMeters: number;
 }
 
-export interface UsePoisResult {
-  pois: Poi[];
-  isLoading: boolean;
-  error: string | null;
-}
-
-export function usePois({
-  coords,
-  categoryKey,
-  radiusMeters,
-}: UsePoisOptions): UsePoisResult {
-  const [pois, setPois] = useState<Poi[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!coords) return;
-
-    const controller = new AbortController();
-
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const filters = getCategoryFilters(categoryKey);
-        const query = buildOverpassQuery(
-          coords!.latitude,
-          coords!.longitude,
-          radiusMeters,
-          filters,
-        );
-
-        const res = await fetchPois(query, controller.signal);
-        if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
-
-        const data: OverpassResponse = await res.json();
-
-        const results: Poi[] = data.elements
-          .map((el) => {
-            const lat = el.type === 'node' ? el.lat : el.center?.lat;
-            const lon = el.type === 'node' ? el.lon : el.center?.lon;
-            if (!lat || !lon || !el.tags?.name) return null;
-
-            return {
-              id: el.id,
-              type: el.type,
-              lat,
-              lon,
-              name: el.tags.name,
-              categoryLabel: labelFromTags(el.tags),
-              address: deriveAddress(el.tags),
-              distanceKm: haversine(
-                coords!.latitude,
-                coords!.longitude,
-                lat,
-                lon,
-              ),
-              tags: el.tags,
-            } satisfies Poi;
-          })
-          .filter((p): p is Poi => p !== null)
-          .sort((a, b) => a.distanceKm - b.distanceKm);
-
-        setPois(results);
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
-        setError((err as Error).message ?? 'Failed to load nearby places.');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    load();
-    return () => controller.abort();
-  }, [coords, categoryKey, radiusMeters]);
-
-  return { pois, isLoading, error };
+export function usePois({ coords, radiusMeters }: UsePoisOptions) {
+  return useQuery({
+    // Key includes lat/lon/radius — category is intentionally excluded
+    // because we filter the cached data client-side instead of re-fetching
+    queryKey: [
+      'pois',
+      coords?.latitude.toFixed(4),
+      coords?.longitude.toFixed(4),
+      radiusMeters,
+    ],
+    queryFn: ({ signal }) =>
+      fetchAllPois(
+        coords!.latitude,
+        coords!.longitude,
+        radiusMeters,
+        signal,
+      ),
+    enabled: !!coords,
+  });
 }
