@@ -8,6 +8,9 @@ import { PoiGrid } from '@/components/PoiGrid';
 const RADIUS_OPTIONS = [
   { label: '750 m', value: 750 },
   { label: '1.5 km', value: 1500 },
+  { label: '3 km', value: 3000 },
+  { label: '5 km', value: 5000 },
+  { label: '10 km', value: 10000 },
 ];
 
 const ALL_KEY = 'All';
