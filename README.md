@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Discovery
 
-## Getting Started
+Find nearby places using OpenStreetMap's Overpass API. Choose your browser location or enter coordinates, adjust the search radius, and browse places sorted by straight-line distance.
 
-First, run the development server:
+## Features
+
+- Browser geolocation with retry and manual-coordinate fallbacks.
+- Search radii from 750 metres to 10 kilometres.
+- Category filters derived from the returned places.
+- Place cards with names, categories, distances, and addresses when available.
+- Loading, empty, and API-error states.
+- Cached results through TanStack Query; switching categories filters locally without another API request.
+
+## Stack
+
+Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS 4 · TanStack Query · OpenStreetMap / Overpass
+
+## Run locally
+
+Requires Node.js 20.9+ and a current version of Bun. The repository includes `bun.lock`.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone git@github.com:MusabAhmedNiz/Discovery.git
+cd Discovery
+bun install --frozen-lockfile
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3000](http://localhost:3000), allow location access, or enter coordinates manually when prompted.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**No API key, database, or environment variables are required.** The browser queries the public Overpass endpoint directly. Browser geolocation requires HTTPS on deployed sites; localhost is supported for development.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+1. `useGeolocation` requests browser coordinates; manual coordinates can override them.
+2. `buildOverpassQuery` constructs a query for supported OpenStreetMap node and way categories within the chosen radius.
+3. `usePois` requests results, keeps named places with usable coordinates, calculates Haversine distances, and sorts nearest first.
+4. TanStack Query caches results by coordinates (rounded to four decimal places) and radius. Results remain fresh for five minutes; unused cache entries are retained for ten minutes.
+5. Category selection filters the cached results in the browser.
 
-To learn more about Next.js, take a look at the following resources:
+## Useful commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+bun run dev                 # Development server
+bun run lint                # ESLint
+bunx tsc --noEmit            # Type checking
+bun run build               # Production build
+bun run start               # Run the production build
+bun run format              # Format the project with Prettier
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project layout
 
-## Deploy on Vercel
+```text
+src/app/page.tsx             Location, radius, and category controls
+src/components/              Place cards, grid, manual-coordinate form, query provider
+src/hooks/useGeolocation.ts  Browser location state
+src/hooks/usePois.ts         Fetching, result transformation, sorting, and caching
+src/lib/overpass.ts          Query builder and API request
+src/lib/categories.ts        Supported OpenStreetMap categories
+src/lib/haversine.ts         Straight-line distance calculation
+src/types/                  Coordinates and place types
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment and limitations
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy as a Next.js application on a compatible host with HTTPS. A public demo URL has not been linked in this repository yet.
+
+- Coverage and address quality depend on local OpenStreetMap contributions.
+- Distances are straight-line estimates, not walking or driving routes.
+- The public Overpass service can time out or rate-limit requests, especially for large radii in dense areas.
+- Queries send the selected coordinates and search radius to the Overpass service.
+- The current interface is a list of places; it does not include a map or saved places.
+- Automated tests are not configured yet.
+
+## Data attribution
+
+Place data is © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database License (ODbL). Queries are served by the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API).
